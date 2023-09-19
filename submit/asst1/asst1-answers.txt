@@ -42,5 +42,207 @@ asst1-start
 
 ////////////////////////// Step 5 //////////////////////////
 
+1.  In the book chapters and in class you were introduced to the mechanisms used to transfer control between user processes and 
+the operating system. Tell us where we can find the first line of OS/161 code that is executed when a trap occurs. Then tell us 
+where control gets transferred to from that point. What about an interrupt? How does that differ?
+
+Within trap.c (src/kern/arch/mips/locore/trap.c) there is a function called mips_trap which takes a trapframe as a parameter.
+According to the documentation, this function is a general traphandling function for mips and is called by the assembly-language 
+exception handler once the trapframe has been set up. Diving deeper into where this function is called we see that in the 
+assembly file within the same directory (exception-mips1.S) mips_trap is called on line 260. When going further up to the origin
+of the call, it becomes clear that the first line of OS161 code that is executed when a trap occurs is under the 
+mips_general_handler. The call being made is to common_exception which then jumps to a series of other branches ultimately
+leading to mips_trap. 
+
+In the event that there is an interrupt, the mips_trap function calls the interrupt handler and returns. The interrupt handler
+called mainbus_interrupt(located at line 188 in trap.c) originates from lamebus_machdep.c (src/kern/arch/sys161/dev)
+If there is no interrupt, mips_trap calls syscall next (src/kern/arch/mips/syscall). Syscall and Interrupt go to different
+parts of the os161 code which may be how they differ.
+
+If neither of these happen, that means there was a VM fault or potentially, a fatal fault.
+
+2. Making a system call, such as write, ultimately leads to a trap. Find the code in OS/161 that invokes system calls from user
+programs and causes traps. In which file and on which lines did you find this code?
+
+System calls would be invoked on line 224 in trap.c inside the mips_trap function. This would only happen as long as no interrupts
+occur
+
+3. Why do you suppose there are libc functions in the "common" part of the source tree (common/libc) as well as in
+userland/lib/libc?
+
+The purpose of libc in both common and within userland is so that the kernel (common) and user mode (userland) both have access
+to the standard c library. The point is to allow easier access to all methods and data structures necessary to perform their 
+respective tasks. Since one of the main points of an OS is to split kernel and user modes into two different levels of access
+for the hardware, it is also important for the standard libraries being used to be different so that in the event that changes
+are made to one (either deliberately or by mistake), those changes don't impact the other. 
+
+4. Name two things that configure configures. What might invalidate that configuration and make you need/want to rerun it?
+
+The full list of things that configure configures can be found on lines 161 and higher. Two such things would be the platform 
+and machine. These configurations may become invalid if there was to be a change made in either the machine or in the plaftorm 
+of the system both of which would relate to any hardware changes made. If changes in the OSTREE configuration were made, we may
+be changing the version of the OS we are on and as such would also invalidate any configurations that we've made in the past
+thus requiring a rerun.
+
+5. What are some of the details which would make a function "machine dependent"? Why might it be important to maintain this
+separation, instead of just putting all of the code in one function?
+
+Machine dependent functions would be those that can only run on specific hardware. The most straightforward example of this would 
+be running x64 assembly on an x64 compatible processor, running ARM assembly on an ARM processor or in this case, MIPS which would
+support a RISC machine compatible with MIPS. These machine dependent functions inside assembly files would not be able to properly 
+run on a different architecture. The way instructions are decoded would be different, the location and function of various registers
+and even the general function and purpose of certain pieces hardware (eg. RISC vs CISC) Functions written in C would be able to 
+compile into the correct assembly based on the system configurations provided however, we most likely would want machine dependent 
+functions in order to address differences in the architecture that is being used. Certain systems may have specific limitations 
+preventing someone from running certain chunks of code. Another potential contributing factor would be simply for organization purposes.
+Although a person could technically implement everything in C and then change things depending on the architecture being used, it would
+be significantly easier if all machine dependent code was sectioned off to specific files and if all c code that could be used universally
+was separated as well.
+
+6. How large is a trapframe? Why?
+
+According to lines 133-134, the trapframe is suposed to be 37 registers long, each of which is 4 bytes in length. So the total byte length
+of the trapframe would be 148 bytes. This is further verified in trapframe.h located in src/kern/arch/mips/include/trapframe.h which has 
+the struct definition of trapframe. Inside that struct, there are 37 declared uint32_t variables which all represent registers (uint32_t is
+4 bytes in length). Based on what lines 34-35 say in trapframe.h "Structure describing what is saved on the stack during entry to the 
+exception handler" the reason for the size of trapframe is to be able to hold all the registers necessary for handling of an exception. This
+is further explained within exception-mips1.S stating that we are trying hold return addressses, special registers, coprocessor information etc.
+
+7. Under what circumstances should you re-run the kern/conf/config script?
+
+You should rerun it in the event there is an error in the initial run, you incorrectly run config instead of ./config, if there are changes 
+made to any attached devices so that we can process device attachments again into $CONFTMP.attach, changes in our hardware (related to devices),
+modifications to files specifically config related ones or changes to any build options.
+
+8. Under what circumstances should you run bmake depend in kern/compile/DUMBVM?
+
+Considering that bmake depend would update information regarding the dependencies between various parts of the OS, we would want to run it
+in the event there have been changes to header file inclusions and when the config script has been run. (Based on os161 manual)  
+
+9. Under what circumstances should you run bmake or bmake install in kern/compile/DUMBVM?
+
+We would run bmake in order to build the C library and user programs. For bmake install, according to the os161 manual, running bmake install 
+will copy the kernel to ~/os161/root where you can boot it in System/161. This means that we would run bmake install when we 
+are initially setting up System/161 in order to run the OS. We would also run it after any changes in DUMBVM so that we have are setting up Sys/161
+with the correctly compiled code. So that would mean that after any config script runs or changes to header file inclusions, we would first run
+bmake depend and then we would run bmake install so that the code ends up in our root directory.
+
+10. When you booted your kernel, you found that there were several commands that you could issue to experiment with it. 
+Explain exactly where and what you would have to do to add a command that printed out, "Hello world!"
+
+We would add this command inside of the menu.c (src/kern/main) file. Within this file are all the commands that we as a user can issue
+into the cmd prompt when os161 is running including cmd_chdir, cmd_quit, cmd_pwd etc. To add our command that printed out 
+hello world we would create our function to print out Hello World into the shell, and then we would add that function into
+the cmdtable found on lin 530 of menu.c This function would be something as simple as kprintf("Hello World") and making sure
+to void any arguments that are provided as we wouldn't be using any arguments. We could call this command hello_world or something
+along the lines of that. Now that the cmd is the cmdtable we would want it to appear as an operation so that user is able to perform
+the command so we would it to the opsmenu line 434 where we would put our cmd name [hello_world] and its description.
+
+11. Why do we need to include these in your OS/161 distribution? Why can't you just use the standard utilities that are 
+present on the machine on which you're working?
+
+This would be somewhat related to the reasoning provided for question 5. The commands that are on any person's physical machine
+are built to run on that machine's architecture. If we were try and run the standard utilities present on that machine there is 
+no guarantee that they work for OS 161 as we are using MIPS and the physical machine could be using other options aside from MIPS. 
+Also, we don't have full transparency on how these standard utilities are implemented. They could be making calls that we haven't
+necessarily implemented which may cause problems. That's why it's better to build these in our OS/161 distribution.
+
+12. When a user program exits, what is done with the program's return value?
+
+The return value is passed back in the v0 register or v0 and v1 if it 64-bit. Additionally an a3 register is set to 
+indicate success. When there is an error, the v0 register is still set however, this time with the error code and the
+a3 register is set to 1 to indicate a failure occurring. This occurs from lines 121-134 in syscall.c
+
+
+////////////////////////// Step 7 //////////////////////////
+
+14. What is the name of the very first function that executes when OS161 starts up? 
+
+We initially start in the start.S file located in src/kern/arch/sys161/main so the first function that actually runs is __start. 
+
+15. What is the very first assembly instruction that executes? 
+
+The very first assembly instruction that executes would on line 55 of start.S:
+
+sw ra, 20(sp)
+
+16. Set the breakpoints in the kernel function that shows the menu and in the kernel main function. Now tell GDB to 
+display all the breakpoints that were set and copy the output to your submit file. 
+
+Num     Type           Disp Enb Address    What
+7       breakpoint     keep y   0x800139e4 in kmain at ../../main/main.c:211
+8       breakpoint     keep y   0x800136d0 in boot at ../../main/main.c:99
+9       breakpoint     keep y   0x8002d18c in mainbus_bootstrap 
+                                           at ../../arch/sys161/dev/lamebus_machdep.c:89
+
+17. Briefly describe what happens between the beginning of the execution and the invocation of the kernel main function. 
+
+The code begins by setting up the boot stack for the first processor at the top of physical memory, and passes a single string argument 
+which we call the boot string. Then it sets up a stack frame for the Kernel Stack. The code then copies the exception handlers, flushes 
+the instruction cache, and initializes the TLB. It sets the status register and loads the Global Pointer. Finally, it prepares to call 
+the main function with the boot string as an argument, and then invocates the kernel main function.
+
+18. What is the assembly language instruction that calls the kernel main function? 
+
+The assembly language instruction that calls kmain would be jal kmain located at line 215 in start.S
+
+211        /*
+212         * We're all set up!
+213         * Fetch the copy of the bootstring as the argument, and call main.
+214         */
+215        jal kmain
+216        move a0, s0                  /* in delay slot */
+217
+218
+219        /*
+
+19. Step through the boot() code to find out what functions are called during early initialization. Paste the gdb output
+that shows you what these functions are.
+
+Inside boot, early initialization occurs:
+
+108             /* Early initialization. */
+109             ram_bootstrap();
+110             proc_bootstrap();
+111             thread_bootstrap();
+112             hardclock_bootstrap();
+113             vfs_bootstrap();
+114             kheap_nextgeneration();
+
+20. Set a breakpoint in thread_bootstrap(). Once you hit that breakpoint, at the very first line of that function, attempt 
+to print the contents of the *bootcpu variable. Copy the output into the submit file. 
+
+When trying to print the contents of *bootcpu, gdb gives a message that says:
+
+Cannot access memory at address 0x80000
+
+This is the result of printing bootcpu
+$2 = (struct cpu *) 0x80000
+
+21. Now, step through that function until after the line that says 'bootcpu = cpu_create(0)'. Now print the content of 
+*bootcpu and paste the output. 
+
+Printing *bootcpu gives the following:
+
+$4 = {c_self = 0x8003af00, c_number = 0, c_hardware_number = 0, c_curthread = 0x8003bf80, 
+  c_zombies = {tl_head = {tln_prev = 0x0, tln_next = 0x8003af1c, tln_self = 0x0}, tl_tail = {
+      tln_prev = 0x8003af10, tln_next = 0x0, tln_self = 0x0}, tl_count = 0}, c_hardclocks = 0, 
+  c_spinlocks = 0, c_isidle = false, c_runqueue = {tl_head = {tln_prev = 0x0, 
+      tln_next = 0x8003af44, tln_self = 0x0}, tl_tail = {tln_prev = 0x8003af38, tln_next = 0x0, 
+      tln_self = 0x0}, tl_count = 0}, c_runqueue_lock = {splk_lock = 0, splk_holder = 0x0}, 
+  c_ipi_pending = 0, c_shootdown = {{ts_placeholder = 0} <repeats 16 times>}, c_numshootdown = 0, 
+  c_ipi_lock = {splk_lock = 0, splk_holder = 0x0}}
+
+Printing bootcpu gives the following address in memory:
+$3 = (struct cpu *) 0x8003af00
+
+22. Print the allcpus array before the boot() function is executed. Paste the output. 
+
+$5 = {arr = {v = 0x0, num = 0, max = 0}}
+
+23. Print again the same array after the boot() function is executed. Paste the output.  
+
+$6 = {arr = {v = 0x80039fe0, num = 1, max = 4}}
+
 
  
