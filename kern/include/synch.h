@@ -74,8 +74,17 @@ void V(struct semaphore *);
  */
 struct lock {
         char *lk_name;
-        // add what you need here
-        // (don't forget to mark things volatile as needed)
+        struct spinlock lock_sl; 
+
+        /**
+         * Wait channel to put threads to sleep and wake them up when 
+         * needed. Will keep track of all threads that have been to sleep
+         * so that one can be awakened when the lock is released.
+         */
+        struct wchan *lock_wchan;
+
+        /* Used to keep track of what thread is holding the lock*/
+        struct thread *held_thread;
 };
 
 struct lock *lock_create(const char *name);
@@ -113,8 +122,14 @@ bool lock_do_i_hold(struct lock *);
 
 struct cv {
         char *cv_name;
-        // add what you need here
-        // (don't forget to mark things volatile as needed)
+        struct spinlock cv_sl;
+
+        /**
+         * Wait channel to put threads to sleep and wake them up when 
+         * needed. Will keep track of all threads that have been to sleep
+         * so that one can be awakened when the lock is released.
+         */
+        struct wchan *cv_wchan;
 };
 
 struct cv *cv_create(const char *name);

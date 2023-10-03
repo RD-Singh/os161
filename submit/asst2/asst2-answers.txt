@@ -1,0 +1,85 @@
+////////////////////////// Step 2 //////////////////////////
+
+1.  What happens to a thread when it exits (i.e., calls thread_exit())? What about when it sleeps?
+
+The thread_exit() function does the following:
+
+It starts off my detaching the current thread from the process by calling the 
+proc_remthread() function. This takes the current thread as a parameter and removes
+it from the process. The exit function then ASSERTS that the current thread has been
+detached from the process by checking that the current threads t_proc variable is NULL.
+t_proc is just the process that the thread belongs to. The exit function then checks that
+the stack has not been overflowed. It uses the thread_checkstack() function which looks
+for numbers that were added to the bottom of the thread's stack and ensures that number still
+exists, if it doesn't this means that there may have been some sort of stack overflow. Finally
+the exit function turns interrupts off on the processor and switches the current thread's 
+state to S_ZOMBIE which means that the thread has exited but has not been deleted.
+
+The wchan_sleep() function does the following:
+
+It starts by ensuring that the cur thread is not in an interrupt handler by using the thread
+struct's t_in_interrupt boolean. After ASSERTING this, the sleep function then ASSERTS that 
+the current thread is holding a lock, specifically a spinlock. In the final ASSERTION, the 
+sleep function checks that the current cpu is only holding one spinlock. Once these ASSERTIONS
+are done, the thread_switch() function is called and the current thread's state is switched to 
+S_SLEEP which puts the thread to sleep. Finally, the wchan_sleep() function acquires a spinlock 
+using the spinlock parameter that was passed on its call.
+
+2.  What function(s) handle(s) a context switch?
+
+The thread_switch() function handles context switches.
+
+3.  What does it mean for a thread to be in each of the possible thread states?
+
+S_READY - means that the thread is ready to run
+S_RUN - means that the thread is currently running
+S_SLEEP - means that the thread is currently asleep and not running (it has not exited yet)
+		- in the implementation of thread_switch, when a thread is moved to this state it is
+		is added to a wait channel
+S_ZOMBIE - means that the thread has exited but is yet to be deleted from memory
+
+4.  What does it mean to turn interrupts off? How is this accomplished? Why is it important to turn off interrupts in the thread subsystem code?
+
+Simply put, turning off interrupts makes it so that the CPU cannot switch the current thread. Most of this handling
+is done using the functions splx, splraise and spllower. Specifically, the functions responsible for turning interrupts
+on and off are cpu_irqoff and cpu_irqon. The reason we want to make sure to turn interrupts off is so that when
+attempting to put a thread to sleep, we don't want get stuck handling the interrupt or deadlocking it
+
+5.  What happens when a thread wakes up another thread? How does a sleeping thread get to run again?
+
+The thread starts by accessing the thread that we are trying to wake up on the waitchannel and removing it from the 
+wait channel. Once this is done the function thread_make_runnable() is called which then adds the specified thread
+to the target cpu's runqueue. This runqueue holds all threads that are in the S_READY state. Once the thread is here,
+the sleeping thread's state changes from S_SLEEP to S_RUN using thread_switch. This allows the thread to resume execution. 
+
+6.  What function(s) choose(s) the next thread to run?
+
+The next thread to run will be the one on the very top of the runqueue threadlist. This thread is accessed using
+threadlist_remhead() which removes the head node of a specified threadlist.
+
+7.  How does it (do they) pick the next thread?
+
+Because the runqueue is a threadlist which is just a linked list, and because the runqueue is meant to act as a queue,
+the thread that is picked is the earliest put into the queue. This follows a first in first out implementation.
+
+8.  What role does the hardware timer play in scheduling? What hardware independent function is called on a timer interrupt?
+
+The hardware independent function that is called on a timer interrupt would be hardclock found in clock.c. This function 
+is able to call two other functions called schedule() and thread_consider_migration(). Threads to get similar amounts of time
+during scheduling due to the hardware timer.
+
+9. Describe how wchan_sleep() and wchan_wakeone() are used to implement semaphores.
+
+wchan_sleep() is used in the P() function of a semaphore (called when a thread is requesting access) to put a thread to sleep
+when the semaphore count is 0. This means that we can't handle any more threads holding the semaphore. Once V() is called, the 
+semaphore count is incremented and the thread on the top of wait channel will awaken and begin its execution again. The idea is 
+to prevent threads from taking up resources with the spinlock usage in the semaphore by idly waiting. Putting the thread to sleep 
+prevents this unnecessary overhead.
+
+10. How does the implementation of wchan ensure that a thread never misses a wakeup signal: that another thread cannot attempt to awaken the first thread just as it is preparing to sleep, but before it is actually placed into the sleep queue?
+
+Wchan has a reliance on a spinlock and a threadlist which acts a queue for the threads that we want to wake up. The spinlock makes 
+it so that only the current cpu being used is able to make any changes to the sleep function thus making it impossible for any other
+thread to make changes to the sleep function while between these steps. The threadlist ensures that any thread that has been put to 
+sleep can receive a wakeup signal. Since the threadlist has a FIFO ordering, it makes sure that threads wakeup in the order they were
+put to sleep.
