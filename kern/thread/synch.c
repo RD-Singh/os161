@@ -230,8 +230,8 @@ lock_acquire(struct lock *lock)
         KASSERT(curthread->t_in_interrupt == false);
 
         /**
-         * ADD A COMMENT ABOUT WHY THE SPINLOCK IS USED 
-         * The spinlock is used to protect the wait channel as well.
+         * The spinlock is used to protect the wait channel as well as 
+         * prevent any race conditions here.
         */
         spinlock_acquire(&lock->lock_sl);
 
