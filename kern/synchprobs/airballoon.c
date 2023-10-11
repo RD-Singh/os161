@@ -15,26 +15,25 @@ volatile int active_threads = 0;
 /* Data structures for rope mappings */
 
 struct hooks {
-    struct ropes *rope_ref;
+   struct ropes * rope_ref;
 };
 
 struct ropes {
-	struct lock *rope_lock;
-	volatile bool rope_cut;
-    int rope_num;
+   struct lock * rope_lock;
+   volatile bool rope_cut;
+   int rope_num;
 };
 
 struct stakes {
-    struct ropes *rope_ref;
-	struct lock *stake_lock;
+   struct ropes * rope_ref;
+   struct lock * stake_lock;
 };
 
 struct hooks ab_hooks[NROPES];
 struct stakes ab_stakes[NROPES];
 
-struct lock *remove_ropes;
-struct lock *thread_count_lock;
-
+struct lock * remove_ropes;
+struct lock * thread_count_lock;
 
 /*
  * Describe your design and any invariants or locking protocols
@@ -133,258 +132,255 @@ struct lock *thread_count_lock;
 
 static
 void
-dandelion(void *p, unsigned long arg)
-{
-	(void)p;
-	(void)arg;
+dandelion(void * p, unsigned long arg) {
+   (void) p;
+   (void) arg;
 
-	kprintf("Dandelion thread starting\n");
+   kprintf("Dandelion thread starting\n");
 
-    /* Check if there are any ropes still left */
-    while(ropes_left > 0){
-        int hook_index = random() % NROPES;
+   /* Check if there are any ropes still left */
+   while (ropes_left > 0) {
+      int hook_index = random() % NROPES;
 
-        struct ropes *r = ab_hooks[hook_index].rope_ref;
+      struct ropes * r = ab_hooks[hook_index].rope_ref;
 
-        lock_acquire(r->rope_lock);
+      lock_acquire(r -> rope_lock);
 
-        /* Checks if the rope has already been cut */
-        if(!r->rope_cut){
+      /* Checks if the rope has already been cut */
+      if (!r -> rope_cut) {
 
-            r->rope_cut = true;
+         r -> rope_cut = true;
 
-			kprintf("Dandelion severed rope %d\n", hook_index);
+         kprintf("Dandelion severed rope %d\n", hook_index);
 
-            /* Decrements the number of ropes left */
-            lock_acquire(remove_ropes);
-            ropes_left--;
-            lock_release(remove_ropes);
+         /* Decrements the number of ropes left */
+         lock_acquire(remove_ropes);
+         ropes_left--;
+         lock_release(remove_ropes);
 
-            lock_release(r->rope_lock);
-            thread_yield();
-        } else {
-            lock_release(r->rope_lock);
-        }
-    }
+         lock_release(r -> rope_lock);
+         thread_yield();
+      } else {
+         lock_release(r -> rope_lock);
+      }
+   }
 
-	kprintf("Dandelion thread done\n");
+   kprintf("Dandelion thread done\n");
 
-    /* Decrements the number of active threads for the main thread to finish*/
-    lock_acquire(thread_count_lock);
-    active_threads--;
-    lock_release(thread_count_lock);
+   /* Decrements the number of active threads for the main thread to finish*/
+   lock_acquire(thread_count_lock);
+   active_threads--;
+   lock_release(thread_count_lock);
 }
 
 static
 void
-marigold(void *p, unsigned long arg)
-{
-	(void)p;
-	(void)arg;
+marigold(void * p, unsigned long arg) {
+   (void) p;
+   (void) arg;
 
-	kprintf("Marigold thread starting\n");
+   kprintf("Marigold thread starting\n");
 
-    while(ropes_left > 0){
-        int stake_index = random() % NROPES;
+   while (ropes_left > 0) {
+      int stake_index = random() % NROPES;
 
-        lock_acquire(ab_stakes[stake_index].stake_lock);
+      lock_acquire(ab_stakes[stake_index].stake_lock);
 
-        struct ropes *r = ab_stakes[stake_index].rope_ref;
-        lock_acquire(r->rope_lock);
+      struct ropes * r = ab_stakes[stake_index].rope_ref;
+      lock_acquire(r -> rope_lock);
 
-        if(!r->rope_cut){
+      if (!r -> rope_cut) {
 
-            r->rope_cut = true;
+         r -> rope_cut = true;
 
-			kprintf("Marigold severed rope %d from stake %d\n", r->rope_num, stake_index);
+         kprintf("Marigold severed rope %d from stake %d\n", r -> rope_num, stake_index);
 
-            lock_acquire(remove_ropes);
-            ropes_left--;
-            lock_release(remove_ropes);
+         lock_acquire(remove_ropes);
+         ropes_left--;
+         lock_release(remove_ropes);
 
-            lock_release(r->rope_lock);
-            lock_release(ab_stakes[stake_index].stake_lock);
-            thread_yield();
+         lock_release(r -> rope_lock);
+         lock_release(ab_stakes[stake_index].stake_lock);
+         thread_yield();
 
-        } else {
-            lock_release(r->rope_lock);
-            lock_release(ab_stakes[stake_index].stake_lock);
-        }
-    }
+      } else {
+         lock_release(r -> rope_lock);
+         lock_release(ab_stakes[stake_index].stake_lock);
+      }
+   }
 
-   	kprintf("Marigold thread done\n");
-    
-    lock_acquire(thread_count_lock);
-	active_threads--;
-	lock_release(thread_count_lock);
+   kprintf("Marigold thread done\n");
+
+   lock_acquire(thread_count_lock);
+   active_threads--;
+   lock_release(thread_count_lock);
 }
 
 static
 void
-flowerkiller(void *p, unsigned long arg)
-{
-	(void)p;
-	(void)arg;
+flowerkiller(void * p, unsigned long arg) {
+   (void) p;
+   (void) arg;
 
-	kprintf("Lord FlowerKiller thread starting\n");
+   kprintf("Lord FlowerKiller thread starting\n");
 
-    while(ropes_left > 0){
+   while (ropes_left > 0) {
 
-        /* Gets to indexes to switch a pair of ropes from a pair of stakes */
-        int stake_a = random() % NROPES;
-        int stake_b = random() % NROPES;
-        
-        /**
-         * Ensures that the indexes it chose are not the same and that the first
-         * index is smaller than the second to prevent any other active flowerkiller
-         * thread from getting the same pair of stakes.
-        */
-        if(stake_a <= stake_b){
-            continue;
-        }
+      /* Gets to indexes to switch a pair of ropes from a pair of stakes */
+      int stake_a = random() % NROPES;
+      int stake_b = random() % NROPES;
 
-        lock_acquire(ab_stakes[stake_a].stake_lock);
-        lock_acquire(ab_stakes[stake_b].stake_lock);
+      /**
+       * Ensures that the indexes it chose are not the same and that the first
+       * index is smaller than the second to prevent any other active flowerkiller
+       * thread from getting the same pair of stakes.
+       */
+      if (stake_a <= stake_b) {
+         continue;
+      }
 
-        struct ropes *rope_a = ab_stakes[stake_a].rope_ref;
-        struct ropes *rope_b = ab_stakes[stake_b].rope_ref;
+      lock_acquire(ab_stakes[stake_a].stake_lock);
+      lock_acquire(ab_stakes[stake_b].stake_lock);
 
-        if(!rope_a->rope_cut && !rope_b->rope_cut){
+      struct ropes * rope_a = ab_stakes[stake_a].rope_ref;
+      struct ropes * rope_b = ab_stakes[stake_b].rope_ref;
 
-            lock_acquire(rope_a->rope_lock);
-            lock_acquire(rope_b->rope_lock);
+      if (!rope_a -> rope_cut && !rope_b -> rope_cut) {
 
-            /* Switches the ropes on the specified stakes */
-            ab_stakes[stake_a].rope_ref = rope_b;
-            ab_stakes[stake_b].rope_ref = rope_a;
+         lock_acquire(rope_a -> rope_lock);
+         lock_acquire(rope_b -> rope_lock);
 
-            kprintf("Lord FlowerKiller switched rope %d from stake %d to stake %d\n", rope_a->rope_num, stake_a, stake_b);
-		    kprintf("Lord FlowerKiller switched rope %d from stake %d to stake %d\n", rope_b->rope_num, stake_b, stake_a);
+         /* Switches the ropes on the specified stakes */
+         ab_stakes[stake_a].rope_ref = rope_b;
+         ab_stakes[stake_b].rope_ref = rope_a;
 
-            lock_release(rope_b->rope_lock);
-            lock_release(rope_a->rope_lock);
-            lock_release(ab_stakes[stake_b].stake_lock);
-            lock_release(ab_stakes[stake_a].stake_lock);
+         kprintf("Lord FlowerKiller switched rope %d from stake %d to stake %d\n", rope_a -> rope_num, stake_a, stake_b);
+         kprintf("Lord FlowerKiller switched rope %d from stake %d to stake %d\n", rope_b -> rope_num, stake_b, stake_a);
 
-            thread_yield();
+         lock_release(rope_b -> rope_lock);
+         lock_release(rope_a -> rope_lock);
+         lock_release(ab_stakes[stake_b].stake_lock);
+         lock_release(ab_stakes[stake_a].stake_lock);
 
-        } else {
-            lock_release(ab_stakes[stake_b].stake_lock);
-            lock_release(ab_stakes[stake_a].stake_lock);
-        }
-    }
+         thread_yield();
 
-    kprintf("Lord FlowerKiller thread done\n");
-    
-    lock_acquire(thread_count_lock);
-	active_threads--;
-	lock_release(thread_count_lock);
+      } else {
+         lock_release(ab_stakes[stake_b].stake_lock);
+         lock_release(ab_stakes[stake_a].stake_lock);
+      }
+   }
+
+   kprintf("Lord FlowerKiller thread done\n");
+
+   lock_acquire(thread_count_lock);
+   active_threads--;
+   lock_release(thread_count_lock);
 }
 
 static
 void
-balloon(void *p, unsigned long arg)
-{
-	(void)p;
-	(void)arg;
+balloon(void * p, unsigned long arg) {
+   (void) p;
+   (void) arg;
 
-	kprintf("Balloon thread starting\n");
+   kprintf("Balloon thread starting\n");
 
-	while(ropes_left > 0);
+   while (ropes_left > 0);
 
-	kprintf("Balloon freed and Prince Dandelion escapes!\n");
-	kprintf("Balloon thread done\n");
+   kprintf("Balloon freed and Prince Dandelion escapes!\n");
+   kprintf("Balloon thread done\n");
 
-	lock_acquire(thread_count_lock);
-	active_threads--;
-	lock_release(thread_count_lock);
+   lock_acquire(thread_count_lock);
+   active_threads--;
+   lock_release(thread_count_lock);
 }
 
 int
-airballoon(int nargs, char **args)
-{
-	
-	int err = 0, i;
+airballoon(int nargs, char ** args) {
 
-	(void)nargs;
-	(void)args;
-	(void)ropes_left;
+   int err = 0, i;
 
-    /**
-     * Initializes all locks, data structures, rope references and global variables
-     * that all other threads make usre of 
-     */
+   (void) nargs;
+   (void) args;
+   (void) ropes_left;
 
-	remove_ropes = lock_create("ropes left lock");
-	thread_count_lock = lock_create("thread count lock");
-
-	for(int i = 0; i < NROPES; i++){
-        struct ropes *r = kmalloc(sizeof(struct ropes));
-
-        r->rope_lock = lock_create("rope lock");
-		r->rope_cut = false;
-        r->rope_num = i;
-
-        ab_hooks[i].rope_ref = r;
-        ab_stakes[i].rope_ref = r;
-        ab_stakes[i].stake_lock = lock_create("stake lock");
-	}
-
-	err = thread_fork("Marigold Thread",
-			  NULL, marigold, NULL, 0);
-	if(err)
-		goto panic;
-	active_threads++;
-
-	err = thread_fork("Dandelion Thread",
-			  NULL, dandelion, NULL, 0);
-	if(err)
-		goto panic;
-	active_threads++;
-
-	for (i = 0; i < N_LORD_FLOWERKILLER; i++) {
-		err = thread_fork("Lord FlowerKiller Thread",
-				  NULL, flowerkiller, NULL, 0);
-		if(err)
-			goto panic;
-		active_threads++;
-	}
-
-	err = thread_fork("Air Balloon",
-			  NULL, balloon, NULL, 0);
-	if(err)
-		goto panic;
-	active_threads++;
-
-	goto done;
-panic:
-	panic("airballoon: thread_fork failed: %s)\n",
-	      strerror(err));
-
-done:
-
-    /* Makes it so that this thread waits until all threads have exited */
-	while(active_threads > 0);
-
-    /* Destroys all locks that were created and frees all memory from rope references */
-	for(int i = 0; i < NROPES; i++){
-		lock_destroy(ab_stakes[i].rope_ref->rope_lock);
-		lock_destroy(ab_stakes[i].stake_lock);
-
-		kfree(ab_stakes[i].rope_ref);
-
-        ab_stakes[i].rope_ref = NULL;
-        ab_hooks[i].rope_ref = NULL;
-	}
-	lock_destroy(remove_ropes);
-	lock_destroy(thread_count_lock);
-
-    /** 
-     * Sets the ropes left value back to its initial value so that the thread can be used again
-     * without exiting the shell
+   /**
+    * Initializes all locks, data structures, rope references and global variables
+    * that all other threads make usre of 
     */
-	ropes_left = NROPES;
-	
-	kprintf("Main thread done\n");
-	return 0;
+
+   remove_ropes = lock_create("ropes left lock");
+   thread_count_lock = lock_create("thread count lock");
+
+   for (int i = 0; i < NROPES; i++) {
+      struct ropes * r = kmalloc(sizeof(struct ropes));
+
+      r -> rope_lock = lock_create("rope lock");
+      r -> rope_cut = false;
+      r -> rope_num = i;
+
+      ab_hooks[i].rope_ref = r;
+      ab_stakes[i].rope_ref = r;
+      ab_stakes[i].stake_lock = lock_create("stake lock");
+   }
+
+   err = thread_fork("Marigold Thread",
+      NULL, marigold, NULL, 0);
+   if (err)
+      goto panic;
+
+   /* Increases the number of threads that are active as the fork above is successful */
+   active_threads++;
+
+   err = thread_fork("Dandelion Thread",
+      NULL, dandelion, NULL, 0);
+   if (err)
+      goto panic;
+   active_threads++;
+
+   for (i = 0; i < N_LORD_FLOWERKILLER; i++) {
+      err = thread_fork("Lord FlowerKiller Thread",
+         NULL, flowerkiller, NULL, 0);
+      if (err)
+         goto panic;
+      active_threads++;
+   }
+
+   err = thread_fork("Air Balloon",
+      NULL, balloon, NULL, 0);
+   if (err)
+      goto panic;
+   active_threads++;
+
+   goto done;
+   panic:
+      panic("airballoon: thread_fork failed: %s)\n",
+         strerror(err));
+
+   done:
+
+      /* Makes it so that this thread waits until all threads have exited */
+      while (active_threads > 0);
+
+   /* Destroys all locks that were created and frees all memory from rope references */
+   for (int i = 0; i < NROPES; i++) {
+      lock_destroy(ab_stakes[i].rope_ref -> rope_lock);
+      lock_destroy(ab_stakes[i].stake_lock);
+
+      kfree(ab_stakes[i].rope_ref);
+
+      ab_stakes[i].rope_ref = NULL;
+      ab_hooks[i].rope_ref = NULL;
+   }
+   lock_destroy(remove_ropes);
+   lock_destroy(thread_count_lock);
+
+   /** 
+    * Sets the ropes left value back to its initial value so that the thread can be used again
+    * without exiting the shell
+    */
+   ropes_left = NROPES;
+
+   kprintf("Main thread done\n");
+   return 0;
 }
